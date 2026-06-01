@@ -188,6 +188,19 @@ export async function createClosureReport(user, restaurant) {
   });
 }
 
+export async function getSavedRestaurantDocs(user) {
+  if (!user) return [];
+  const firebase = await initFirebase();
+  if (!firebase) return [];
+  const { firestoreModule } = await loadFirebase();
+  const q = firestoreModule.query(
+    firestoreModule.collection(firebase.db, 'user_saved_restaurants'),
+    firestoreModule.where('user_id', '==', user.uid)
+  );
+  const snapshot = await firestoreModule.getDocs(q);
+  return snapshot.docs.map((doc) => doc.data());
+}
+
 export async function rateRestaurant(user, restaurant, score) {
   if (!user) throw new Error('로그인이 필요합니다.');
   if (!Number.isInteger(score) || score < 1 || score > 10) {

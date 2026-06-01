@@ -12,10 +12,17 @@ const mimeTypes = {
   '.md': 'text/markdown; charset=utf-8'
 };
 
+// 클린 URL 지원: /saved → saved.html
+const cleanUrlMap = {
+  '/saved': 'saved.html',
+};
+
 function resolvePath(pathname) {
   const decoded = decodeURIComponent(pathname);
   const safePath = normalize(decoded).replace(/^(\.\.[/\\])+/, '');
-  const filePath = join(ROOT, safePath === '/' ? 'index.html' : safePath);
+  const mapped = cleanUrlMap[safePath] ?? null;
+  const resolved = mapped ?? (safePath === '/' ? 'index.html' : safePath);
+  const filePath = join(ROOT, resolved);
   if (!filePath.startsWith(ROOT)) return null;
   return filePath;
 }

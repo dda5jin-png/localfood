@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>내가 저장한 맛집 — 전국 로컬 맛집 리스트</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="saved-header">
+      <a href="./">← 전체 맛집으로</a>
+      <h1>내가 저장한 맛집</h1>
+    </header>
+
+    <main class="saved-main">
+      <div id="savedList"></div>
+      <div id="savedEmpty" class="saved-empty" hidden>
+        <p id="savedEmptyMsg">아직 저장한 맛집이 없습니다.<br />관심 있는 맛집을 저장해두면 나중에 다시 확인할 수 있습니다.</p>
+        <a href="./" class="btn-outline" style="display:inline-block; text-decoration:none; margin-top:8px;">맛집 둘러보기</a>
+      </div>
+      <div id="loginRequired" class="saved-empty" hidden>
+        <p>저장한 맛집은 로그인 후 확인할 수 있습니다.</p>
+        <button id="savedLoginBtn" type="button" class="btn-outline">카카오 로그인</button>
+      </div>
+    </main>
+
+    <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>
+    <script src="./saved.js" type="module"></script>
+  </body>
+</html>

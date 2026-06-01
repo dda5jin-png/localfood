@@ -1,24 +1,21 @@
 import {
-  createClosureReport,
   firebaseReady,
   onAuthChange,
-  rateRestaurant,
   saveRestaurant,
   signInWithKakao,
   signOutUser,
   unsaveRestaurant,
-  watchMyRatings,
   watchSavedRestaurants
 } from './firebase-client.js';
 
-// 지도 클릭 시 해당 그룹의 키워드로 region 필드를 prefix 매칭
+// 지도 버튼 → 지역 키워드 매핑 (region 필드 prefix 매칭)
 const MAP_REGIONS = {
   '서울': ['서울'],
   '경기/인천': ['경기', '인천', '수원', '용인', '안양', '부천', '시흥', '의왕', '군포', '광명', '김포', '파주', '일산', '고양', '의정부', '구리', '남양주', '판교', '안산', '화성', '평택', '안성', '송탄', '동두천', '양주', '양평', '하남', '오산', '과천', '가평', '포천', '연천', '청평'],
   '강원': ['강원', '강릉', '춘천', '속초', '원주', '양양', '고성', '인제', '동해', '삼척', '태백', '영월', '정선', '철원', '홍천', '횡성', '평창', '용평', '화천', '주문진'],
   '충청/대전': ['대전', '충남', '충북', '청주', '충주', '제천', '천안', '아산', '당진', '서산', '예산', '홍성', '보령', '서천', '논산', '공주', '부여', '조치원', '음성', '진천', '보은', '옥천', '영동', '세종'],
   '전라/광주': ['광주', '전남', '전북', '전주', '순천', '여수', '목포', '순창', '담양', '나주', '강진', '영광', '함평', '광양', '군산', '익산', '부안', '남원', '임실', '장수', '고창', '정읍', '김제', '완도', '진도', '해남', '영암', '구례', '보성', '고흥'],
-  '경북/대구': ['대구', '경북', '구미', '경산', '경주', '포항', '안동', '영주', '영천', '상주', '문경', '의성', '청송', '영양', '영덕', '청도', '고령', '성주', '칠곡', '예천', '봉화', '울진', '진천'],
+  '경북/대구': ['대구', '경북', '구미', '경산', '경주', '포항', '안동', '영주', '영천', '상주', '문경', '의성', '청송', '영양', '영덕', '청도', '고령', '성주', '칠곡', '예천', '봉화', '울진'],
   '경남/부산/울산': ['부산', '울산', '경남', '창원', '마산', '진해', '진주', '통영', '거제', '남해', '사천', '밀양', '양산', '김해', '창녕', '함안', '의령', '합천', '거창', '함양', '산청'],
   '제주': ['제주', '모슬포'],
 };
@@ -28,43 +25,49 @@ const state = {
   config: {},
   user: null,
   savedIds: new Set(),
-  myRatings: new Map(),
   search: '',
-  region: '',
-  status: '',
   mapRegion: ''
 };
 
-const elements = {
-  totalCount: document.querySelector('#totalCount'),
-  lastUpdated: document.querySelector('#lastUpdated'),
-  summaryTotal: document.querySelector('#summaryTotal'),
-  summaryOpen: document.querySelector('#summaryOpen'),
-  summaryClosed: document.querySelector('#summaryClosed'),
+const el = {
   searchInput: document.querySelector('#searchInput'),
-  regionFilter: document.querySelector('#regionFilter'),
   list: document.querySelector('#restaurantList'),
   emptyState: document.querySelector('#emptyState'),
+  emptyMessage: document.querySelector('#emptyMessage'),
+  emptyResetAll: document.querySelector('#emptyResetAll'),
+  emptyClearSearch: document.querySelector('#emptyClearSearch'),
+  statusBar: document.querySelector('#statusBar'),
+  summaryTotal: document.querySelector('#summaryTotal'),
+  summaryVisible: document.querySelector('#summaryVisible'),
+  scopeLabel: document.querySelector('#scopeLabel'),
+  scopeValue: document.querySelector('#scopeValue'),
+  lastUpdated: document.querySelector('#lastUpdated'),
   authStatus: document.querySelector('#authStatus'),
   loginButton: document.querySelector('#loginButton'),
   logoutButton: document.querySelector('#logoutButton'),
-  statusButtons: [...document.querySelectorAll('[data-status]')],
+  savedLink: document.querySelector('#savedLink'),
   mapButtons: [...document.querySelectorAll('.map-btn')],
-  mapClearBtn: document.querySelector('#mapClearBtn')
+  mapClearBtn: document.querySelector('#mapClearBtn'),
+  loginToast: document.querySelector('#loginToast'),
+  toastLoginBtn: document.querySelector('#toastLoginBtn'),
+  toastCloseBtn: document.querySelector('#toastCloseBtn'),
 };
+
+// ──────────────────────────────────────────
+// 필터 로직
+// 핵심: 검색어가 있으면 → 전체 데이터에서 검색 (지역 필터 무시)
+//        검색어 없으면 → 지역 필터만 적용
+// ──────────────────────────────────────────
+
+function getRegionGroup(row) {
+  for (const [group, keywords] of Object.entries(MAP_REGIONS)) {
+    if (keywords.some((k) => row.region.startsWith(k))) return group;
+  }
+  return null;
+}
 
 function normalize(value) {
   return String(value ?? '').trim().toLowerCase();
-}
-
-function formatStatus(status) {
-  if (status === 'EXCLUDED') return '제외';
-  return status === 'CLOSED' ? '폐업' : '영업 중';
-}
-
-function statusClass(status) {
-  if (status === 'EXCLUDED') return 'excluded';
-  return status === 'CLOSED' ? 'closed' : 'open';
 }
 
 function escapeHtml(value) {
@@ -77,18 +80,116 @@ function escapeHtml(value) {
 }
 
 function sortRows(rows) {
-  return [...rows].sort((a, b) => {
-    const order = { OPEN: 0, CLOSED: 1, EXCLUDED: 2 };
-    const statusOrder = (order[a.status] ?? 3) - (order[b.status] ?? 3);
-    if (statusOrder !== 0) return statusOrder;
-    return `${a.region} ${a.name}`.localeCompare(`${b.region} ${b.name}`, 'ko');
+  return [...rows].sort((a, b) =>
+    `${a.region} ${a.name}`.localeCompare(`${b.region} ${b.name}`, 'ko')
+  );
+}
+
+function getFilteredRows() {
+  const hasSearch = state.search.trim().length > 0;
+  const query = normalize(state.search);
+
+  return sortRows(state.rows).filter((row) => {
+    if (hasSearch) {
+      // 검색어 있으면 → 전체에서 검색 (지역 무시)
+      const text = normalize(
+        `${row.region} ${row.name} ${row.menu} ${row.remark} ${row.verification_note}`
+      );
+      return text.includes(query);
+    }
+    // 검색어 없으면 → 지역 필터만
+    if (state.mapRegion) {
+      const keywords = MAP_REGIONS[state.mapRegion] || [];
+      return keywords.some((k) => row.region.startsWith(k));
+    }
+    return true;
   });
+}
+
+// ──────────────────────────────────────────
+// 렌더링
+// ──────────────────────────────────────────
+
+function renderAuth() {
+  const ready = firebaseReady();
+  if (!ready) {
+    // Firebase 미설정 시 로그인 버튼만 조용히 숨김 (사용자에게 오류 노출 안 함)
+    el.authStatus.textContent = '';
+    el.authStatus.hidden = true;
+    el.loginButton.hidden = true;
+    el.logoutButton.hidden = true;
+    el.savedLink.hidden = true;
+    return;
+  }
+
+  el.authStatus.hidden = false;
+  if (state.user) {
+    const label = state.user.displayName || state.user.uid.replace('kakao:', '');
+    el.authStatus.textContent = `${label}님`;
+    el.loginButton.hidden = true;
+    el.logoutButton.hidden = false;
+    el.savedLink.hidden = false;
+  } else {
+    el.authStatus.textContent = '로그인 없이 둘러보는 중';
+    el.loginButton.hidden = false;
+    el.loginButton.disabled = false;
+    el.loginButton.textContent = '카카오 로그인';
+    el.logoutButton.hidden = true;
+    el.savedLink.hidden = true;
+  }
+}
+
+function renderSummary(filteredCount) {
+  const total = state.rows.length;
+  const hasSearch = state.search.trim().length > 0;
+
+  el.summaryTotal.textContent = total;
+  el.summaryVisible.textContent = filteredCount;
+
+  if (hasSearch) {
+    el.scopeLabel.textContent = '검색 범위';
+    el.scopeValue.textContent = '전체 지역';
+  } else if (state.mapRegion) {
+    el.scopeLabel.textContent = '선택 지역';
+    el.scopeValue.textContent = state.mapRegion;
+  } else {
+    el.scopeLabel.textContent = '선택 지역';
+    el.scopeValue.textContent = '전체 지역';
+  }
+}
+
+function renderStatusBar() {
+  const hasSearch = state.search.trim().length > 0;
+
+  if (hasSearch) {
+    el.statusBar.textContent = `전체 지역에서 "${state.search}"을 검색 중입니다.`;
+  } else if (state.mapRegion) {
+    el.statusBar.textContent = `${state.mapRegion} 지역 맛집을 보고 있습니다.`;
+  } else {
+    el.statusBar.textContent = '전체 지역 맛집을 보고 있습니다.';
+  }
+}
+
+function renderEmptyState(rows) {
+  const hasSearch = state.search.trim().length > 0;
+  const isEmpty = rows.length === 0;
+
+  el.emptyState.hidden = !isEmpty;
+  if (!isEmpty) {
+    if (hasSearch) {
+      el.emptyMessage.textContent = `"${state.search}"과 일치하는 맛집이 없습니다. 상호명, 지역명, 메뉴명으로 다시 검색해보세요.`;
+    } else if (state.mapRegion) {
+      el.emptyMessage.textContent = `${state.mapRegion} 지역에 등록된 맛집이 아직 없습니다. 다른 지역을 선택해보세요.`;
+    } else {
+      el.emptyMessage.textContent = '등록된 맛집이 없습니다.';
+    }
+    el.emptyClearSearch.hidden = !hasSearch;
+  }
 }
 
 function createReportIssueUrl(row) {
   const baseUrl = state.config.githubIssuesUrl;
   if (!baseUrl) return '';
-
   const title = `[폐업 신고] ${row.region} ${row.name}`;
   const body = [
     '## 폐업 신고',
@@ -97,64 +198,17 @@ function createReportIssueUrl(row) {
     `- 지역: ${row.region}`,
     `- 식당명: ${row.name}`,
     `- 대표 메뉴: ${row.menu}`,
-    `- 현재 상태: ${formatStatus(row.status)}`,
-    `- 마지막 검증일: ${row.last_verified || '-'}`,
     '',
     '## 확인한 근거',
     '',
     '- 예: 현장 방문, 지도 서비스 폐업 표시, 전화 확인 등',
     ''
   ].join('\n');
-
   const url = new URL(baseUrl);
   url.searchParams.set('title', title);
   url.searchParams.set('body', body);
   url.searchParams.set('labels', '폐업신고');
   return url.toString();
-}
-
-function matchesMapRegion(row) {
-  if (!state.mapRegion) return true;
-  const keywords = MAP_REGIONS[state.mapRegion] || [];
-  return keywords.some((k) => row.region.startsWith(k));
-}
-
-function getFilteredRows() {
-  const query = normalize(state.search);
-  return sortRows(state.rows).filter((row) => {
-    const text = normalize(
-      `${row.region} ${row.name} ${row.menu} ${row.business_hours} ${row.holiday_note} ${row.remark} ${row.verification_note}`
-    );
-    const matchesSearch = !query || text.includes(query);
-    const matchesRegion = !state.region || row.region === state.region;
-    const matchesStatus = !state.status || row.status === state.status;
-    const matchesMap = matchesMapRegion(row);
-    return matchesSearch && matchesRegion && matchesStatus && matchesMap;
-  });
-}
-
-function formatHours(row) {
-  const hours = row.business_hours || '확인 필요';
-  const holiday = row.holiday_note ? ` / ${row.holiday_note}` : '';
-  return `${hours}${holiday}`;
-}
-
-function formatRating(row) {
-  if (row.rating_status === 'EXCLUDED_ONE_POINT_QUORUM') {
-    return `제외: 1점 ${row.rating_one_count || 0}명`;
-  }
-  if (row.rating_count >= 30) {
-    return `${Number(row.rating_average || 0).toFixed(1)}점 / ${row.rating_count}명`;
-  }
-  return `평가 ${row.rating_count || 0}/30명`;
-}
-
-function ratingOptions(selectedScore) {
-  const options = ['<option value="">내 점수</option>'];
-  for (let score = 10; score >= 1; score -= 1) {
-    options.push(`<option value="${score}" ${selectedScore === score ? 'selected' : ''}>${score}점</option>`);
-  }
-  return options.join('');
 }
 
 function groupByRegion(rows) {
@@ -166,134 +220,43 @@ function groupByRegion(rows) {
   }, new Map());
 }
 
-function getLinks(row) {
-  const links = row.links || {};
-  const naver = links.naver || `https://search.naver.com/search.naver?query=${encodeURIComponent(
-    [row.region, row.name, row.menu].filter(Boolean).join(' ')
-  )}`;
-  return {
-    naver,
-    kakao: links.kakao || ''
-  };
-}
-
-function getRestaurantById(id) {
-  return state.rows.find((row) => row.id === id);
-}
-
-function renderAuth() {
-  if (!firebaseReady()) {
-    elements.authStatus.textContent = 'Firebase 설정 필요';
-    elements.loginButton.disabled = true;
-    elements.loginButton.textContent = '설정 대기';
-    elements.logoutButton.hidden = true;
-    return;
-  }
-
-  if (state.user) {
-    const label = state.user.displayName || state.user.uid.replace('kakao:', '');
-    elements.authStatus.textContent = `${label}님`;
-    elements.loginButton.hidden = true;
-    elements.logoutButton.hidden = false;
-  } else {
-    elements.authStatus.textContent = '로그인 없이 둘러보는 중';
-    elements.loginButton.hidden = false;
-    elements.loginButton.disabled = false;
-    elements.loginButton.textContent = '카카오 로그인';
-    elements.logoutButton.hidden = true;
-  }
-}
-
-function renderSummary() {
-  const total = state.rows.length;
-  const open = state.rows.filter((row) => row.status === 'OPEN').length;
-  const closed = state.rows.filter((row) => row.status === 'CLOSED').length;
-  const lastVerified = state.rows
-    .map((row) => row.last_verified)
-    .filter(Boolean)
-    .sort()
-    .at(-1);
-
-  elements.totalCount.textContent = `${total}곳`;
-  elements.lastUpdated.textContent = lastVerified ? `최근 검증 ${lastVerified}` : '검증일 없음';
-  elements.summaryTotal.textContent = total;
-  elements.summaryOpen.textContent = open;
-  elements.summaryClosed.textContent = closed;
-}
-
-function renderRegions() {
-  const regions = [...new Set(state.rows.map((row) => row.region).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, 'ko')
-  );
-
-  elements.regionFilter.innerHTML = [
-    '<option value="">전체 지역</option>',
-    ...regions.map((region) => `<option value="${escapeHtml(region)}">${escapeHtml(region)}</option>`)
-  ].join('');
-}
-
 function renderList() {
   const rows = getFilteredRows();
-  elements.emptyState.hidden = rows.length > 0;
-  elements.list.innerHTML = [...groupByRegion(rows).entries()]
+  renderStatusBar();
+  renderSummary(rows.length);
+  renderEmptyState(rows);
+
+  el.list.innerHTML = [...groupByRegion(rows).entries()]
     .map(([region, items]) => {
       const cards = items
         .map((row) => {
-          const links = getLinks(row);
-          const reportUrl = createReportIssueUrl(row);
           const isSaved = state.savedIds.has(row.id);
-          const myScore = state.myRatings.get(row.id);
-          const note = row.remark || row.verification_note || '특이사항 없음';
+          const naverUrl = (row.links && row.links.naver)
+            ? row.links.naver
+            : `https://search.naver.com/search.naver?query=${encodeURIComponent([row.region, row.name, row.menu].filter(Boolean).join(' '))}`;
+          const reportUrl = createReportIssueUrl(row);
+
           return `
             <article class="restaurant-item">
-              <div class="item-main">
-                <div>
-                  <div class="item-title-row">
-                    <h3>${escapeHtml(row.name)}</h3>
-                    <span class="region-badge">${escapeHtml(row.region)}</span>
-                    <span class="status ${statusClass(row.status)}">${formatStatus(row.status)}</span>
-                  </div>
-                  <p class="menu">${escapeHtml(row.menu || '대표 메뉴 확인 필요')}</p>
+              <div class="item-header">
+                <div class="item-title-row">
+                  <h3>${escapeHtml(row.name)}</h3>
+                  <span class="region-badge">${escapeHtml(row.region)}</span>
                 </div>
-                <div class="link-cell">
-                  <button class="save-link ${isSaved ? 'active' : ''}" type="button" data-action="save" data-id="${escapeHtml(row.id)}">
-                    ${isSaved ? '저장됨' : '내 맛집 저장'}
-                  </button>
-                  <label class="rating-control">
-                    <span>평점</span>
-                    <select data-action="rate" data-id="${escapeHtml(row.id)}">
-                      ${ratingOptions(myScore)}
-                    </select>
-                  </label>
-                  <a href="${escapeHtml(links.naver)}" target="_blank" rel="noopener noreferrer">Naver</a>
-                  ${links.kakao ? `<a href="${escapeHtml(links.kakao)}" target="_blank" rel="noopener noreferrer">Kakao</a>` : ''}
-                  ${
-                    state.user
-                      ? `<button class="report-link" type="button" data-action="report-closed" data-id="${escapeHtml(row.id)}">폐업 신고</button>`
-                      : reportUrl
-                      ? `<a class="report-link" href="${escapeHtml(reportUrl)}" target="_blank" rel="noopener noreferrer">폐업 신고</a>`
-                      : `<button class="report-link disabled" type="button" disabled>폐업 신고</button>`
-                  }
-                </div>
+                <p class="menu-text">${escapeHtml(row.menu || '대표 메뉴 확인 필요')}</p>
+                ${row.remark || row.business_hours !== '확인 필요' ? `<p class="item-note">${escapeHtml(row.remark || row.business_hours || '')}</p>` : ''}
               </div>
-              <dl class="item-details">
-                <div>
-                  <dt>영업시간</dt>
-                  <dd>${escapeHtml(formatHours(row))}</dd>
-                </div>
-                <div>
-                  <dt>비고</dt>
-                  <dd>${escapeHtml(note)}</dd>
-                </div>
-                <div>
-                  <dt>평점</dt>
-                  <dd>${escapeHtml(formatRating(row))}</dd>
-                </div>
-                <div>
-                  <dt>검증</dt>
-                  <dd>${escapeHtml(row.last_verified || '검증 전')}</dd>
-                </div>
-              </dl>
+              <div class="item-actions">
+                <button
+                  class="btn-save ${isSaved ? 'saved' : ''}"
+                  type="button"
+                  data-action="save"
+                  data-id="${escapeHtml(row.id)}">
+                  ${isSaved ? '저장됨 ✓' : '저장'}
+                </button>
+                <a class="btn-naver" href="${escapeHtml(naverUrl)}" target="_blank" rel="noopener noreferrer">네이버에서 확인</a>
+                ${reportUrl ? `<a class="btn-report" href="${escapeHtml(reportUrl)}" target="_blank" rel="noopener noreferrer">폐업 신고</a>` : ''}
+              </div>
             </article>
           `;
         })
@@ -312,59 +275,110 @@ function renderList() {
     .join('');
 }
 
-function render() {
-  renderSummary();
-  renderList();
-}
-
 async function loadRestaurants() {
   const [response, configResponse] = await Promise.all([
     fetch('./data.json', { cache: 'no-store' }),
     fetch('./site.config.json', { cache: 'no-store' }).catch(() => null)
   ]);
-  if (!response.ok) {
-    throw new Error(`data.json을 불러오지 못했습니다. (${response.status})`);
-  }
+  if (!response.ok) throw new Error(`data.json을 불러오지 못했습니다. (${response.status})`);
 
   const data = await response.json();
-  if (!Array.isArray(data)) {
-    throw new Error('data.json은 배열이어야 합니다.');
-  }
+  if (!Array.isArray(data)) throw new Error('data.json은 배열이어야 합니다.');
 
   state.rows = data;
   state.config = configResponse?.ok ? await configResponse.json() : {};
-  renderRegions();
-  render();
+
+  const lastVerified = data.map((r) => r.last_verified).filter(Boolean).sort().at(-1);
+  el.lastUpdated.textContent = lastVerified ? `최근 검증 ${lastVerified}` : '검증일 없음';
+  el.summaryTotal.textContent = data.length;
+
+  renderList();
 }
 
-elements.searchInput.addEventListener('input', (event) => {
+// ──────────────────────────────────────────
+// 이벤트
+// ──────────────────────────────────────────
+
+el.searchInput.addEventListener('input', (event) => {
   state.search = event.target.value;
   renderList();
 });
 
-elements.regionFilter.addEventListener('change', (event) => {
-  state.region = event.target.value;
-  renderList();
-});
+// 지도 지역 버튼: 클릭 시 검색어 초기화 후 해당 지역 표시
+for (const btn of el.mapButtons) {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.map;
+    const wasActive = state.mapRegion === key;
 
-for (const button of elements.statusButtons) {
-  button.addEventListener('click', () => {
-    state.status = button.dataset.status;
-    for (const item of elements.statusButtons) {
-      item.classList.toggle('active', item === button);
+    // 검색어 초기화
+    if (state.search) {
+      state.search = '';
+      el.searchInput.value = '';
     }
+
+    state.mapRegion = wasActive ? '' : key;
+
+    for (const b of el.mapButtons) {
+      b.classList.toggle('active', b.dataset.map === state.mapRegion);
+    }
+    el.mapClearBtn.hidden = !state.mapRegion;
     renderList();
   });
 }
 
-loadRestaurants().catch((error) => {
-  elements.emptyState.hidden = false;
-  elements.emptyState.textContent = error.message;
+el.mapClearBtn.addEventListener('click', () => {
+  state.mapRegion = '';
+  state.search = '';
+  el.searchInput.value = '';
+  for (const b of el.mapButtons) b.classList.remove('active');
+  el.mapClearBtn.hidden = true;
+  renderList();
 });
 
-elements.loginButton.addEventListener('click', async () => {
-  elements.loginButton.disabled = true;
-  elements.loginButton.textContent = '로그인 중';
+el.emptyResetAll.addEventListener('click', () => {
+  state.mapRegion = '';
+  state.search = '';
+  el.searchInput.value = '';
+  for (const b of el.mapButtons) b.classList.remove('active');
+  el.mapClearBtn.hidden = true;
+  renderList();
+});
+
+el.emptyClearSearch.addEventListener('click', () => {
+  state.search = '';
+  el.searchInput.value = '';
+  renderList();
+});
+
+// 저장 버튼 이벤트
+el.list.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-action="save"]');
+  if (!button) return;
+
+  if (!state.user) {
+    showLoginToast();
+    return;
+  }
+
+  const restaurantId = button.dataset.id;
+  const restaurant = state.rows.find((r) => r.id === restaurantId);
+  if (!restaurant) return;
+
+  try {
+    if (state.savedIds.has(restaurantId)) {
+      await unsaveRestaurant(state.user, restaurantId);
+    } else {
+      await saveRestaurant(state.user, restaurant);
+    }
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+// 로그인 버튼
+el.loginButton.addEventListener('click', async () => {
+  el.loginButton.disabled = true;
+  el.loginButton.textContent = '로그인 중…';
   try {
     await signInWithKakao();
   } catch (error) {
@@ -373,95 +387,25 @@ elements.loginButton.addEventListener('click', async () => {
   }
 });
 
-elements.logoutButton.addEventListener('click', async () => {
+el.logoutButton.addEventListener('click', async () => {
   await signOutUser();
 });
 
-elements.list.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-action]');
-  if (!button) return;
-
-  const restaurant = getRestaurantById(button.dataset.id);
-  if (!restaurant) return;
-
-  try {
-    if (button.dataset.action === 'save') {
-      if (!state.user) {
-        await signInWithKakao();
-        return;
-      }
-      if (state.savedIds.has(restaurant.id)) {
-        await unsaveRestaurant(state.user, restaurant.id);
-      } else {
-        await saveRestaurant(state.user, restaurant);
-      }
-    }
-
-    if (button.dataset.action === 'report-closed') {
-      await createClosureReport(state.user, restaurant);
-      button.textContent = '신고 완료';
-      button.disabled = true;
-    }
-  } catch (error) {
-    alert(error.message);
-  }
-});
-
-elements.list.addEventListener('change', async (event) => {
-  const control = event.target.closest('select[data-action="rate"]');
-  if (!control) return;
-
-  const restaurant = getRestaurantById(control.dataset.id);
-  if (!restaurant) return;
-
-  try {
-    if (!state.user) {
-      control.value = '';
-      await signInWithKakao();
-      return;
-    }
-
-    const score = Number(control.value);
-    if (!score) return;
-    await rateRestaurant(state.user, restaurant, score);
-  } catch (error) {
-    alert(error.message);
-  }
-});
-
-// 지도 지역 버튼
-for (const btn of elements.mapButtons) {
-  btn.addEventListener('click', () => {
-    const key = btn.dataset.map;
-    if (state.mapRegion === key) {
-      state.mapRegion = '';
-    } else {
-      state.mapRegion = key;
-      state.region = '';
-      elements.regionFilter.value = '';
-    }
-    for (const b of elements.mapButtons) {
-      b.classList.toggle('active', b.dataset.map === state.mapRegion);
-    }
-    elements.mapClearBtn.hidden = !state.mapRegion;
-    renderList();
-  });
+// 토스트
+function showLoginToast() {
+  el.loginToast.hidden = false;
 }
 
-elements.mapClearBtn.addEventListener('click', () => {
-  state.mapRegion = '';
-  for (const b of elements.mapButtons) b.classList.remove('active');
-  elements.mapClearBtn.hidden = true;
-  renderList();
+el.toastCloseBtn.addEventListener('click', () => {
+  el.loginToast.hidden = true;
 });
 
-elements.mapClearBtn?.addEventListener('click', () => {
-  state.mapRegion = '';
-  for (const b of elements.mapButtons) b.classList.remove('active');
-  elements.mapClearBtn.hidden = true;
-  renderList();
+el.toastLoginBtn.addEventListener('click', async () => {
+  el.loginToast.hidden = true;
+  el.loginButton.click();
 });
 
+// Firebase Auth 상태 감지
 onAuthChange(async (user) => {
   state.user = user;
   renderAuth();
@@ -469,8 +413,10 @@ onAuthChange(async (user) => {
     state.savedIds = savedIds;
     renderList();
   });
-  await watchMyRatings(user, (ratings) => {
-    state.myRatings = ratings;
-    renderList();
-  });
+});
+
+// 초기 로드
+loadRestaurants().catch((error) => {
+  el.emptyState.hidden = false;
+  el.emptyMessage.textContent = error.message;
 });
