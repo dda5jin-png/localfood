@@ -1,16 +1,8 @@
 {
   "functions": {
     "index.js": {
-      "includeFiles": [
-        "index.html",
-        "frontend.js",
-        "styles.css",
-        "data.json",
-        "site.config.json",
-        "firebase-client.js",
-        "firebase-config.js",
-        "reports/**"
-      ]
-    }
+      "includeFiles": "index.html|frontend.js|styles.css|data.json|site.config.json|firebase-client.js|firebase-config.js|reports/**"
+    },
+    "api/kakao-login.js": {}
   }
 }
