@@ -4,6 +4,7 @@
   "description": "Zero-cost local restaurant tracker with Gemini, Kakao Local API, GitHub Actions, and JSON file storage.",
   "type": "module",
   "private": true,
+  "main": "index.js",
   "engines": {
     "node": ">=20"
   },
