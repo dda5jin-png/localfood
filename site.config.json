@@ -1,4 +1,4 @@
 {
-  "githubIssuesUrl": "",
-  "adminGuide": "Set githubIssuesUrl to https://github.com/OWNER/REPO/issues/new after publishing the repository."
+  "githubIssuesUrl": "https://github.com/dda5jin-png/localfood/issues/new",
+  "adminGuide": "User closure reports can be opened as GitHub issues when Firebase login is not configured."
 }
