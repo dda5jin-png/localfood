@@ -24,19 +24,18 @@
     </header>
 
     <main>
+      <!-- 검색/필터 툴바 -->
       <section class="toolbar" aria-label="맛집 검색 및 필터">
         <label class="search-box">
           <span>검색</span>
           <input id="searchInput" type="search" placeholder="지역, 식당명, 메뉴" autocomplete="off" />
         </label>
-
         <label>
-          <span>지역</span>
+          <span>직접 지역 선택</span>
           <select id="regionFilter">
             <option value="">전체 지역</option>
           </select>
         </label>
-
         <div class="segmented" role="group" aria-label="영업 상태">
           <button class="active" type="button" data-status="">전체</button>
           <button type="button" data-status="OPEN">영업 중</button>
@@ -45,25 +44,42 @@
         </div>
       </section>
 
+      <!-- 요약 -->
       <section class="summary-grid" aria-label="요약">
-        <article>
-          <span>전체 등록</span>
-          <strong id="summaryTotal">0</strong>
-        </article>
-        <article>
-          <span>영업 중</span>
-          <strong id="summaryOpen">0</strong>
-        </article>
-        <article>
-          <span>폐업 표시</span>
-          <strong id="summaryClosed">0</strong>
-        </article>
+        <article><span>전체 등록</span><strong id="summaryTotal">0</strong></article>
+        <article><span>영업 중</span><strong id="summaryOpen">0</strong></article>
+        <article><span>폐업 표시</span><strong id="summaryClosed">0</strong></article>
       </section>
 
-      <section class="region-list" aria-label="지역별 맛집 목록">
-        <div id="restaurantList"></div>
-        <p id="emptyState" class="empty-state" hidden>조건에 맞는 맛집이 없습니다.</p>
-      </section>
+      <!-- 지도 패널 + 목록 -->
+      <div class="content-layout">
+
+        <!-- 지역 지도 패널 -->
+        <aside class="map-panel" aria-label="지역 지도">
+          <div class="map-panel-header">
+            <span class="map-title">지역으로 찾기</span>
+            <button id="mapClearBtn" class="map-clear-btn" type="button" hidden>전체 보기</button>
+          </div>
+          <div class="korea-map" role="group" aria-label="대한민국 지역 선택">
+            <button class="map-btn" data-map="서울" type="button">서울</button>
+            <button class="map-btn" data-map="경기/인천" type="button">경기/인천</button>
+            <button class="map-btn" data-map="강원" type="button">강원</button>
+            <button class="map-btn" data-map="충청/대전" type="button">충청/대전</button>
+            <button class="map-btn" data-map="경북/대구" type="button">경북/대구</button>
+            <button class="map-btn" data-map="전라/광주" type="button">전라/광주</button>
+            <button class="map-btn" data-map="경남/부산/울산" type="button">경남<br>부산/울산</button>
+            <button class="map-btn map-btn--jeju" data-map="제주" type="button">제주</button>
+          </div>
+          <p class="map-hint">클릭하면 해당 지역만 표시됩니다</p>
+        </aside>
+
+        <!-- 맛집 목록 -->
+        <section class="region-list" aria-label="지역별 맛집 목록">
+          <div id="restaurantList"></div>
+          <p id="emptyState" class="empty-state" hidden>조건에 맞는 맛집이 없습니다.</p>
+        </section>
+
+      </div>
     </main>
 
     <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>

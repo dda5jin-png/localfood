@@ -11,6 +11,18 @@ import {
   watchSavedRestaurants
 } from './firebase-client.js';
 
+// 지도 클릭 시 해당 그룹의 키워드로 region 필드를 prefix 매칭
+const MAP_REGIONS = {
+  '서울': ['서울'],
+  '경기/인천': ['경기', '인천', '수원', '용인', '안양', '부천', '시흥', '의왕', '군포', '광명', '김포', '파주', '일산', '고양', '의정부', '구리', '남양주', '판교', '안산', '화성', '평택', '안성', '송탄', '동두천', '양주', '양평', '하남', '오산', '과천', '가평', '포천', '연천', '청평'],
+  '강원': ['강원', '강릉', '춘천', '속초', '원주', '양양', '고성', '인제', '동해', '삼척', '태백', '영월', '정선', '철원', '홍천', '횡성', '평창', '용평', '화천', '주문진'],
+  '충청/대전': ['대전', '충남', '충북', '청주', '충주', '제천', '천안', '아산', '당진', '서산', '예산', '홍성', '보령', '서천', '논산', '공주', '부여', '조치원', '음성', '진천', '보은', '옥천', '영동', '세종'],
+  '전라/광주': ['광주', '전남', '전북', '전주', '순천', '여수', '목포', '순창', '담양', '나주', '강진', '영광', '함평', '광양', '군산', '익산', '부안', '남원', '임실', '장수', '고창', '정읍', '김제', '완도', '진도', '해남', '영암', '구례', '보성', '고흥'],
+  '경북/대구': ['대구', '경북', '구미', '경산', '경주', '포항', '안동', '영주', '영천', '상주', '문경', '의성', '청송', '영양', '영덕', '청도', '고령', '성주', '칠곡', '예천', '봉화', '울진', '진천'],
+  '경남/부산/울산': ['부산', '울산', '경남', '창원', '마산', '진해', '진주', '통영', '거제', '남해', '사천', '밀양', '양산', '김해', '창녕', '함안', '의령', '합천', '거창', '함양', '산청'],
+  '제주': ['제주', '모슬포'],
+};
+
 const state = {
   rows: [],
   config: {},
@@ -19,7 +31,8 @@ const state = {
   myRatings: new Map(),
   search: '',
   region: '',
-  status: ''
+  status: '',
+  mapRegion: ''
 };
 
 const elements = {
@@ -35,7 +48,9 @@ const elements = {
   authStatus: document.querySelector('#authStatus'),
   loginButton: document.querySelector('#loginButton'),
   logoutButton: document.querySelector('#logoutButton'),
-  statusButtons: [...document.querySelectorAll('[data-status]')]
+  statusButtons: [...document.querySelectorAll('[data-status]')],
+  mapButtons: [...document.querySelectorAll('.map-btn')],
+  mapClearBtn: document.querySelector('#mapClearBtn')
 };
 
 function normalize(value) {
@@ -98,6 +113,12 @@ function createReportIssueUrl(row) {
   return url.toString();
 }
 
+function matchesMapRegion(row) {
+  if (!state.mapRegion) return true;
+  const keywords = MAP_REGIONS[state.mapRegion] || [];
+  return keywords.some((k) => row.region.startsWith(k));
+}
+
 function getFilteredRows() {
   const query = normalize(state.search);
   return sortRows(state.rows).filter((row) => {
@@ -107,7 +128,8 @@ function getFilteredRows() {
     const matchesSearch = !query || text.includes(query);
     const matchesRegion = !state.region || row.region === state.region;
     const matchesStatus = !state.status || row.status === state.status;
-    return matchesSearch && matchesRegion && matchesStatus;
+    const matchesMap = matchesMapRegion(row);
+    return matchesSearch && matchesRegion && matchesStatus && matchesMap;
   });
 }
 
@@ -228,6 +250,7 @@ function renderList() {
                 <div>
                   <div class="item-title-row">
                     <h3>${escapeHtml(row.name)}</h3>
+                    <span class="region-badge">${escapeHtml(row.region)}</span>
                     <span class="status ${statusClass(row.status)}">${formatStatus(row.status)}</span>
                   </div>
                   <p class="menu">${escapeHtml(row.menu || '대표 메뉴 확인 필요')}</p>
@@ -404,6 +427,39 @@ elements.list.addEventListener('change', async (event) => {
   } catch (error) {
     alert(error.message);
   }
+});
+
+// 지도 지역 버튼
+for (const btn of elements.mapButtons) {
+  btn.addEventListener('click', () => {
+    const key = btn.dataset.map;
+    if (state.mapRegion === key) {
+      state.mapRegion = '';
+    } else {
+      state.mapRegion = key;
+      state.region = '';
+      elements.regionFilter.value = '';
+    }
+    for (const b of elements.mapButtons) {
+      b.classList.toggle('active', b.dataset.map === state.mapRegion);
+    }
+    elements.mapClearBtn.hidden = !state.mapRegion;
+    renderList();
+  });
+}
+
+elements.mapClearBtn.addEventListener('click', () => {
+  state.mapRegion = '';
+  for (const b of elements.mapButtons) b.classList.remove('active');
+  elements.mapClearBtn.hidden = true;
+  renderList();
+});
+
+elements.mapClearBtn?.addEventListener('click', () => {
+  state.mapRegion = '';
+  for (const b of elements.mapButtons) b.classList.remove('active');
+  elements.mapClearBtn.hidden = true;
+  renderList();
 });
 
 onAuthChange(async (user) => {
