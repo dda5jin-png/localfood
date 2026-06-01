@@ -1,1 +1,11 @@
-{}
+{
+  "functions": {
+    "index.js": {
+      "includeFiles": "**"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/kakao-login", "destination": "/api/kakao-login" },
+    { "source": "/(.*)", "destination": "/index.js" }
+  ]
+}
