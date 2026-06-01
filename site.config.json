@@ -1,0 +1,4 @@
+{
+  "githubIssuesUrl": "",
+  "adminGuide": "Set githubIssuesUrl to https://github.com/OWNER/REPO/issues/new after publishing the repository."
+}

@@ -1,0 +1,22 @@
+{
+  "name": "local-restaurant-tracker",
+  "version": "1.0.0",
+  "description": "Zero-cost local restaurant tracker with Gemini, Kakao Local API, GitHub Actions, and JSON file storage.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "add": "node add.js",
+    "admin": "node admin.js",
+    "import": "node import.js",
+    "sync-ratings": "node sync-ratings.js",
+    "verify": "node verify.js",
+    "report": "node report.js",
+    "serve": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

@@ -1,0 +1,70 @@
+name: Monthly restaurant verification
+
+on:
+  schedule:
+    # GitHub cron is UTC. This runs at 00:00 KST on the 1st after the guard below.
+    - cron: '0 15 28-31 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Check Korean calendar date
+        id: kst-date
+        if: github.event_name == 'schedule'
+        run: |
+          if [ "$(TZ=Asia/Seoul date +%d)" != "01" ]; then
+            echo "Not the 1st in Asia/Seoul. Skipping."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: github.event_name != 'schedule' || steps.kst-date.outputs.should_run == 'true'
+        run: npm ci
+
+      - name: Verify restaurant status
+        if: github.event_name != 'schedule' || steps.kst-date.outputs.should_run == 'true'
+        run: npm run verify
+        env:
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+
+      - name: Sync user ratings
+        if: github.event_name != 'schedule' || steps.kst-date.outputs.should_run == 'true'
+        run: npm run sync-ratings
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+
+      - name: Generate monthly markdown report
+        if: github.event_name != 'schedule' || steps.kst-date.outputs.should_run == 'true'
+        run: npm run report
+
+      - name: Commit and push changes
+        if: github.event_name != 'schedule' || steps.kst-date.outputs.should_run == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.json pending-additions.json pending-removals.json reports/*.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: monthly restaurant verification"
+          git push
