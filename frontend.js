@@ -231,9 +231,7 @@ function renderList() {
       const cards = items
         .map((row) => {
           const isSaved = state.savedIds.has(row.id);
-          const naverUrl = (row.links && row.links.naver)
-            ? row.links.naver
-            : `https://search.naver.com/search.naver?query=${encodeURIComponent([row.region, row.name, row.menu].filter(Boolean).join(' '))}`;
+          const naverMapUrl = `https://map.naver.com/v5/search/${encodeURIComponent([row.region, row.name].filter(Boolean).join(' '))}`;
           const reportUrl = createReportIssueUrl(row);
 
           return `
@@ -254,7 +252,7 @@ function renderList() {
                   data-id="${escapeHtml(row.id)}">
                   ${isSaved ? '저장됨 ✓' : '저장'}
                 </button>
-                <a class="btn-naver" href="${escapeHtml(naverUrl)}" target="_blank" rel="noopener noreferrer">네이버에서 확인</a>
+                <a class="btn-naver" href="${escapeHtml(naverMapUrl)}" target="_blank" rel="noopener noreferrer">지도에서 확인</a>
                 ${reportUrl ? `<a class="btn-report" href="${escapeHtml(reportUrl)}" target="_blank" rel="noopener noreferrer">폐업 신고</a>` : ''}
               </div>
             </article>

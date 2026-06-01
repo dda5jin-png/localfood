@@ -39,8 +39,8 @@ function renderSavedList(docs) {
       </header>
       <div class="region-items">
         ${docs.map((doc) => {
-          const naverUrl = `https://search.naver.com/search.naver?query=${encodeURIComponent(
-            [doc.region, doc.restaurant_name, doc.menu].filter(Boolean).join(' ')
+          const naverUrl = `https://map.naver.com/v5/search/${encodeURIComponent(
+            [doc.region, doc.restaurant_name].filter(Boolean).join(' ')
           )}`;
           return `
             <article class="restaurant-item">
@@ -53,7 +53,7 @@ function renderSavedList(docs) {
               </div>
               <div class="item-actions">
                 <button class="btn-save saved" type="button" data-id="${escapeHtml(doc.restaurant_id)}">저장 취소</button>
-                <a class="btn-naver" href="${escapeHtml(naverUrl)}" target="_blank" rel="noopener noreferrer">네이버에서 확인</a>
+                <a class="btn-naver" href="${escapeHtml(naverUrl)}" target="_blank" rel="noopener noreferrer">지도에서 확인</a>
               </div>
             </article>
           `;
